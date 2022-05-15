@@ -1,0 +1,123 @@
+cabal-version:      3.6
+name:               mutable-hashmap
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             brian
+maintainer:         littlebubu.shu@gmail.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+flag debug
+  description: Enable debug support
+  manual: True
+  default: False
+
+common common-options
+  default-language: GHC2021
+  default-extensions:
+    LambdaCase,
+    OverloadedStrings,
+    DuplicateRecordFields,
+    DataKinds,
+    GADTs,
+    ViewPatterns,
+    PatternSynonyms,
+    TypeFamilies,
+    TypeFamilyDependencies,
+    FunctionalDependencies,
+    OverloadedLabels,
+    ImportQualifiedPost,
+    LexicalNegation,
+    NoStarIsType,
+    NoGeneralizedNewtypeDeriving,
+    DerivingVia,
+    PartialTypeSignatures,
+  ghc-options:
+    -Wall
+    -Wredundant-constraints
+    -Wno-name-shadowing
+    -- until OverloadedRecordUpdate stabilizes
+    -Wno-ambiguous-fields
+    -Wno-partial-type-signatures
+    -Werror=incomplete-patterns
+    -Werror=incomplete-uni-patterns
+    -Werror=missing-methods
+    -Werror=incomplete-record-updates
+    -Wcpp-undef
+    -Widentities
+  build-depends:
+    base >= 4.12 && <5,
+    primitive ^>= 0.7.3.0,
+    hashable ^>= 1.4.0.0,
+
+library
+  import: common-options
+  hs-source-dirs: src
+  include-dirs: include
+  exposed-modules:
+    Data.HashMap.Mutable
+    Data.HashMap.Mutable.Internal
+    Data.HashMap.Mutable.Internal.Array
+    Data.HashMap.Mutable.Internal.PrimArray
+    Data.HashMap.Mutable.Internal.Utils
+    Data.HashMap.Mutable.Internal.Basic
+    Data.HashMap.Mutable.Internal.Arena
+  if flag(debug)
+    cpp-options: -DASSERTS
+  -- For dumping the generated code:
+  -- ghc-options: -ddump-simpl -ddump-stg-final -ddump-cmm -ddump-asm -ddump-to-file
+  -- ghc-options: -dsuppress-coercions -dsuppress-unfoldings -dsuppress-module-prefixes
+  -- ghc-options: -dsuppress-uniques -dsuppress-timestamps
+
+common rtsopts
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+test-suite mutable-hashmap-test
+  import: common-options, rtsopts
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Spec.hs
+  other-modules:
+    Data.HashMap.MutableSpec
+  build-depends:
+    mutable-hashmap,
+    vector-hashtables ^>= 0.1.1.1,
+    vector ^>= 0.12.3.1,
+    unordered-containers ^>= 0.2.19.1,
+    hspec ^>= 2.9.4,
+    QuickCheck ^>= 2.14.2,
+    quickcheck-instances ^>= 0.3.27,
+  build-tool-depends:
+    hspec-discover:hspec-discover,
+
+benchmark mutable-hashmap-bench
+  import: common-options, rtsopts
+  type: exitcode-stdio-1.0
+  hs-source-dirs: bench
+  main-is: Main.hs
+  ghc-options: -O2
+  build-depends:
+    mutable-hashmap,
+    criterion ^>= 1.5.13.0,
+    hashtables ^>= 1.3,
+    vector-hashtables ^>= 0.1.1.1,
+    unordered-containers ^>= 0.2.19.1,
+    vector ^>= 0.12.3.1,
+    bytestring ^>= 0.11.0.0,
