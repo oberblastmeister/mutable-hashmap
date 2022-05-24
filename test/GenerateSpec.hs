@@ -4,7 +4,6 @@
 
 module GenerateSpec where
 
-import Data.List (stripPrefix)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -14,6 +13,27 @@ import System.Directory qualified as Directory
 import System.FilePath ((<.>), (</>))
 import System.FilePath qualified as FilePath
 import Test.Hspec
+
+spec :: Spec
+spec = do
+  xit "generate files" $ do
+    mapM_
+      (uncurry writeModule)
+      [ ("Data.HashMap.Mutable.Boxed", "Primitive.Array"),
+        ("Data.HashMap.Mutable.Boxed.Small", "Primitive.SmallArray"),
+        ("Data.HashMap.Mutable.Prim", "Primitive.PrimArray"),
+        ("Data.HashMap.Mutable.Unlifted", "Contiguous.UnliftedArray")
+      ]
+
+writeModule :: Text -> Text -> IO ()
+writeModule name arrayTy = do
+  let contents = makeModuleContents name arrayTy
+  cwd <- makeAbsolute "./"
+  let namePath = T.replace "." "/" name
+  let fullPath = cwd </> "src/" </> T.unpack namePath <.> ".hs"
+  let dir = FilePath.takeDirectory fullPath
+  Directory.createDirectoryIfMissing True dir
+  TIO.writeFile fullPath contents
 
 makeModuleContents :: Text -> Text -> Text
 makeModuleContents name arrayTy =
@@ -68,30 +88,3 @@ makeModuleContents name arrayTy =
     fromList = Generic.fromList
     {-# INLINE fromList #-}
   |]
-
-writeModule :: Text -> Text -> IO ()
-writeModule name arrayTy = do
-  let contents = makeModuleContents name arrayTy
-  cwd <- makeAbsolute "./"
-  let namePath = T.replace "." "/" name
-  let fullPath = cwd </> "src/" </> T.unpack namePath <.> ".hs"
-  let dir = FilePath.takeDirectory fullPath
-  Directory.createDirectoryIfMissing True dir
-  TIO.writeFile fullPath contents
-
-spec :: Spec
-spec = do
-  xit "generate files" $ do
-    mapM_
-      (uncurry writeModule)
-      [ ("Data.HashMap.Mutable.Boxed", "Primitive.Array"),
-        ("Data.HashMap.Mutable.Boxed.Small", "Primitive.SmallArray"),
-        ("Data.HashMap.Mutable.Prim", "Primitive.PrimArray"),
-        ("Data.HashMap.Mutable.Unlifted", "Contiguous.UnliftedArray")
-      ]
-
-replace :: (HasCallStack, Eq a) => [a] -> [a] -> [a] -> [a]
-replace [] _ _ = error "replace, first argument cannot be empty"
-replace from to xs | Just xs <- stripPrefix from xs = to ++ replace from to xs
-replace from to (x : xs) = x : replace from to xs
-replace _from _to [] = []
