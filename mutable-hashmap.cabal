@@ -62,6 +62,7 @@ common common-options
   build-depends:
     base >= 4.12 && <5,
     primitive ^>= 0.7.3.0,
+    contiguous ^>= 0.6.2.0,
     hashable ^>= 1.4.0.0,
 
 library

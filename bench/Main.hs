@@ -4,6 +4,7 @@ import Control.Monad.Primitive (PrimState)
 import Criterion.Main
 import Data.HashMap.Mutable.Internal.Arena qualified as HashMap.Mutable.Arena
 import Data.HashTable.IO qualified as HashTable
+import Data.Primitive (Array)
 import Data.Vector.Hashtables qualified as Vector.Hashtables
 import Data.Vector.Hashtables.Internal qualified as VH
 import Data.Vector.Mutable qualified as VBM
@@ -48,7 +49,7 @@ comparisonBenches n =
               whnfIO $
                 insertMonotonic
                   n
-                  HashMap.Mutable.Arena.newWithCapacity
+                  (HashMap.Mutable.Arena.newWithCapacity @Array)
                   HashMap.Mutable.Arena.insert,
             bench "vector-hashtables" $
               whnfIO $
@@ -63,7 +64,7 @@ comparisonBenches n =
               whnfIO $
                 insertMonotonic
                   n
-                  (const HashMap.Mutable.Arena.new)
+                  (const (HashMap.Mutable.Arena.new @Array))
                   HashMap.Mutable.Arena.insert,
             bench "vector-hashtables" $
               whnfIO $

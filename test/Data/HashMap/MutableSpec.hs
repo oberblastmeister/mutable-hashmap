@@ -14,6 +14,7 @@ import Data.Vector.Hashtables qualified as Vector.Hashtables
 import Data.Vector.Mutable qualified as VBM
 import Test.Hspec
 import Test.Hspec.QuickCheck
+import Data.Primitive (Array)
 
 spec :: Spec
 spec = parallel $ do
@@ -62,7 +63,7 @@ propInsertDelete kvs ks ikvs = do
 compareHashMaps ::
   [(Int, Int)] ->
   ( HashMap.Strict.HashMap Int Int ->
-    HashMap.Mutable.HashMap (PrimState IO) Int Int ->
+    HashMap.Mutable.HashMap Array (PrimState IO) Int Int ->
     IO (HashMap.Strict.HashMap Int Int)
   ) ->
   IO ()
