@@ -2,7 +2,7 @@ module Main where
 
 import Control.Monad.Primitive (PrimState)
 import Criterion.Main
-import Data.HashMap.Mutable.Internal.Arena qualified as HashMap.Mutable.Arena
+import Data.HashMap.Mutable.Internal.Generic qualified as HashMap.Mutable.Arena
 import Data.HashTable.IO qualified as HashTable
 import Data.Primitive (Array)
 import Data.Vector.Hashtables qualified as Vector.Hashtables

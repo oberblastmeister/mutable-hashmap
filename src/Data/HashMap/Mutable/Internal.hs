@@ -1,3 +1,3 @@
-module Data.HashMap.Mutable.Internal (module M) where
+module Data.HashMap.Mutable.Internal where
 
-import Data.HashMap.Mutable.Internal.Arena as M
+-- import Data.HashMap.Mutable.Internal.Arena as M

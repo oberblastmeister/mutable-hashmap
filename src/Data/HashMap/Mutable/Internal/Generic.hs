@@ -1,12 +1,11 @@
 {-# LANGUAGE RoleAnnotations #-}
 
-module Data.HashMap.Mutable.Internal.Arena where
+module Data.HashMap.Mutable.Internal.Generic where
 
 import Control.Monad (forM_, when)
 import Control.Monad.Primitive
 import Data.Bits ((.&.))
 import Data.Functor ((<&>))
--- import Data.HashMap.Mutable.Internal.Array qualified as Array
 import Data.HashMap.Mutable.Internal.PrimArray qualified as PrimArray
 import Data.Hashable (Hashable)
 import Data.Hashable qualified as Hashable
@@ -18,8 +17,6 @@ import GHC.Exts qualified as Exts
 type role HashMap nominal nominal nominal nominal
 
 newtype HashMap arr s k v = HashMap {var :: MutVar s (HashMap_ arr s k v)}
-
--- type role HashMap representational nominal nominal representational
 
 data HashMap_ arr s k v = -- | Invariants: buckets, hashes, links, keys, and values must all be the same size
   -- A value with the same index in hashes, links, and keys forms an entry. The index is called the entryIndex.

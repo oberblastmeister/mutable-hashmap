@@ -7,7 +7,7 @@ import Control.Exception qualified as Exception
 import Control.Monad (forM_)
 import Control.Monad.Primitive (PrimState)
 import Data.Foldable (foldl')
-import Data.HashMap.Mutable qualified as HashMap.Mutable
+import Data.HashMap.Mutable.Generic qualified as HashMap.Mutable
 import Data.HashMap.Strict qualified as HashMap.Strict
 import Data.List qualified as List
 import Data.Vector.Hashtables qualified as Vector.Hashtables
