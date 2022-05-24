@@ -6,12 +6,13 @@ import Control.Monad (forM_, when)
 import Control.Monad.Primitive
 import Data.Bits ((.&.))
 import Data.Functor ((<&>))
-import Data.HashMap.Mutable.Internal.PrimArray qualified as PrimArray
+-- import Data.HashMap.Mutable.Internal.Array qualified as Array
 import Data.Hashable (Hashable)
 import Data.Hashable qualified as Hashable
+import Data.Primitive.Array (sizeofMutableArray, MutableArray)
 import Data.Primitive.Contiguous qualified as Array
 import Data.Primitive.MutVar
-import Data.Primitive.PrimArray (MutablePrimArray, PrimArray, primArrayFromList)
+import Data.Primitive.PrimArray (PrimArray, primArrayFromList)
 import GHC.Exts qualified as Exts
 
 type role HashMap nominal nominal nominal nominal
@@ -23,15 +24,15 @@ data HashMap_ arr s k v = -- | Invariants: buckets, hashes, links, keys, and val
   -- Entries are only valid from indices 0..size, exclusive on size
   HashMap_
   { -- | Invariant: Must be of length 3
-    refs :: !(MutablePrimArray s Int),
+    refs :: !(MutableArray s Int),
     -- | A mapping from the hash code modulo the buckets size to an entryIndex
     -- code style, use this array whenever you want to query the size of the HashMap
-    buckets :: !(MutablePrimArray s Int),
+    buckets :: !(MutableArray s Int),
     -- | Invariant: The hash code for a particular entryIndex is set to -1 to signify a deleted element
     -- This is needed when iterating over the map, when we go through the entries instead of buckets
-    hashes :: !(MutablePrimArray s Hash),
+    hashes :: !(MutableArray s Hash),
     -- | Invariant: The link for a particular entryIndex is -1 when there is no link, the end of the linked list of indices
-    links :: !(MutablePrimArray s Int),
+    links :: !(MutableArray s Int),
     keys :: !((Array.Mutable arr) s k),
     values :: !((Array.Mutable arr) s v)
   }
@@ -59,22 +60,22 @@ newWithCapacity capacity = newWithCapacity_ capacity >>= newMutVar <&> HashMap
 newWithCapacity_ :: (HasArray arr k v, PrimMonad m) => Int -> m (HashMap_ arr (PrimState m) k v)
 newWithCapacity_ capacity = do
   let capacity' = getPrime capacity
-  refs <- PrimArray.replicate 3 0
-  PrimArray.write refs freeListRef -1
-  buckets <- PrimArray.replicate capacity' -1
-  hashes <- PrimArray.new capacity'
-  links <- PrimArray.new capacity'
+  refs <- Array.replicateMut 3 0
+  Array.write refs freeListRef -1
+  buckets <- Array.replicateMut capacity' -1
+  hashes <- Array.new capacity'
+  links <- Array.new capacity'
   keys <- Array.new capacity'
   values <- Array.new capacity'
   pure HashMap_ {refs, buckets, hashes, links, keys, values}
 {-# INLINE newWithCapacity_ #-}
 
 capacity_ :: HashMap_ arr s k v -> Int
-capacity_ HashMap_ {buckets} = PrimArray.lengthM buckets
+capacity_ HashMap_ {buckets} = sizeofMutableArray buckets
 {-# INLINE capacity_ #-}
 
 size_ :: PrimMonad m => HashMap_ arr (PrimState m) k v -> m Int
-size_ HashMap_ {refs} = PrimArray.read refs sizeRef
+size_ HashMap_ {refs} = Array.read refs sizeRef
 {-# INLINE size_ #-}
 
 fromList :: (HasArray arr k v, PrimMonad m, Hashable k) => [(k, v)] -> m (HashMap arr (PrimState m) k v)
@@ -90,14 +91,14 @@ toList HashMap {var} = do
   let go !i xs
         | i < 0 = pure xs
         | otherwise = do
-            hashCode <- PrimArray.read hashes i
+            hashCode <- Array.read hashes i
             if hashCode == -1
               then go (i - 1) xs
               else do
                 key <- Array.read keys i
                 value <- Array.read values i
                 go (i - 1) ((key, value) : xs)
-  size <- PrimArray.read refs sizeRef
+  size <- Array.read refs sizeRef
   go (size - 1) []
 {-# INLINEABLE toList #-}
 
@@ -107,7 +108,7 @@ unsafeToList HashMap {var} = do
   let go !i
         | i < 0 = pure []
         | otherwise = do
-            hashCode <- PrimArray.read hashes i
+            hashCode <- Array.read hashes i
             if hashCode == -1
               then go $ i - 1
               else do
@@ -115,7 +116,7 @@ unsafeToList HashMap {var} = do
                 value <- Array.read values i
                 xs <- unsafeInterleave $ go $ i - 1
                 pure $ (key, value) : xs
-  size <- PrimArray.read refs sizeRef
+  size <- Array.read refs sizeRef
   go (size - 1)
 {-# INLINEABLE unsafeToList #-}
 
@@ -135,19 +136,19 @@ lookup' hash key HashMap {var} = do
 lookupIndex_ :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap_ arr (PrimState m) k v -> m Int
 lookupIndex_ hash key HashMap_ {buckets, hashes, keys, links} = do
   let hashCode = hash .&. hashMask
-      bucketIndex = hashCode `rem` PrimArray.lengthM buckets
+      bucketIndex = hashCode `rem` bucketsSize buckets
       go i
         | i /= -1 = do
-            hashCode' <- PrimArray.read hashes i
+            hashCode' <- Array.read hashes i
             if hashCode == hashCode'
               then do
                 key' <- Array.read keys i
                 if key == key'
                   then pure i
-                  else go =<< PrimArray.read links i
-              else go =<< PrimArray.read links i
+                  else go =<< Array.read links i
+              else go =<< Array.read links i
         | otherwise = pure -1
-  go =<< PrimArray.read buckets bucketIndex
+  go =<< Array.read buckets bucketIndex
 {-# INLINEABLE lookupIndex_ #-}
 
 delete :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> HashMap arr (PrimState m) k v -> m ()
@@ -158,29 +159,29 @@ delete' :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap arr (Pr
 delete' hash key HashMap {var} = do
   HashMap_ {refs, buckets, hashes, links, keys, values} <- readMutVar var
   let hashCode = hash .&. hashMask
-      bucketIndex = hashCode `rem` PrimArray.lengthM buckets
+      bucketIndex = hashCode `rem` bucketsSize buckets
       go prevIndex entryIndex
         | entryIndex /= -1 = do
-            hashCode' <- PrimArray.read hashes entryIndex
+            hashCode' <- Array.read hashes entryIndex
             if hashCode == hashCode'
               then do
                 key' <- Array.read keys entryIndex
                 if key == key'
                   then do
-                    next <- PrimArray.read links entryIndex
+                    next <- Array.read links entryIndex
                     if prevIndex == -1
-                      then PrimArray.write buckets bucketIndex next
-                      else PrimArray.write links prevIndex next
-                    PrimArray.write hashes entryIndex -1
-                    PrimArray.write links entryIndex =<< PrimArray.read refs freeListRef
+                      then Array.write buckets bucketIndex next
+                      else Array.write links prevIndex next
+                    Array.write hashes entryIndex -1
+                    Array.write links entryIndex =<< Array.read refs freeListRef
                     Array.write keys entryIndex undefinedElem
                     Array.write values entryIndex undefinedElem
-                    PrimArray.write refs freeListRef entryIndex
-                    PrimArray.write refs freeSizeRef =<< (+ 1) <$> PrimArray.read refs freeSizeRef
-                  else go entryIndex =<< PrimArray.read links entryIndex
-              else go entryIndex =<< PrimArray.read links entryIndex
+                    Array.write refs freeListRef entryIndex
+                    Array.write refs freeSizeRef =<< (+ 1) <$> Array.read refs freeSizeRef
+                  else go entryIndex =<< Array.read links entryIndex
+              else go entryIndex =<< Array.read links entryIndex
         | otherwise = pure ()
-  go -1 =<< PrimArray.read buckets bucketIndex
+  go -1 =<< Array.read buckets bucketIndex
 {-# INLINEABLE delete' #-}
 
 insert :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> v -> HashMap arr (PrimState m) k v -> m ()
@@ -194,31 +195,31 @@ insert' hash key value map@HashMap {var} = Exts.inline insert_' hash key value m
 insert_' :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> v -> HashMap arr (PrimState m) k v -> HashMap_ arr (PrimState m) k v -> m ()
 insert_' hash key value HashMap {var} map@HashMap_ {refs, buckets, hashes, links, keys, values} = do
   let !hashCode = hash .&. hashMask
-      !bucketIndex = hashCode `rem` PrimArray.lengthM buckets
+      !bucketIndex = hashCode `rem` bucketsSize buckets
       go entryIndex
         | entryIndex /= -1 = do
-            hashCode' <- PrimArray.read hashes entryIndex
+            hashCode' <- Array.read hashes entryIndex
             if hashCode == hashCode'
               then do
                 key' <- Array.read keys entryIndex
                 if key == key'
                   then Array.write values entryIndex value
-                  else go =<< PrimArray.read links entryIndex
-              else go =<< PrimArray.read links entryIndex
+                  else go =<< Array.read links entryIndex
+              else go =<< Array.read links entryIndex
         | otherwise = addOrResize
       addOrResize = do
-        freeSize <- PrimArray.read refs freeSizeRef
+        freeSize <- Array.read refs freeSizeRef
         if freeSize > 0
           then do
-            freeList <- PrimArray.read refs freeListRef
-            next <- PrimArray.read links freeList
-            PrimArray.write refs freeListRef next
-            PrimArray.write refs freeSizeRef $! freeSize - 1
+            freeList <- Array.read refs freeListRef
+            next <- Array.read links freeList
+            Array.write refs freeListRef next
+            Array.write refs freeSizeRef $! freeSize - 1
             add' freeList bucketIndex map
           else do
-            size <- PrimArray.read refs sizeRef
-            PrimArray.write refs sizeRef $! size + 1
-            if size == PrimArray.lengthM buckets
+            size <- Array.read refs sizeRef
+            Array.write refs sizeRef $! size + 1
+            if size == bucketsSize buckets
               then do
                 let newSize = getPrime $ size * 2
                 map' <- resize_ newSize map
@@ -228,17 +229,17 @@ insert_' hash key value HashMap {var} map@HashMap_ {refs, buckets, hashes, links
       {-# INLINE addOrResize #-}
       add' entryIndex bucketIndex map = add entryIndex bucketIndex hashCode key value map
       {-# INLINE add' #-}
-  go =<< PrimArray.read buckets bucketIndex
+  go =<< Array.read buckets bucketIndex
 {-# INLINEABLE insert_' #-}
 
 add :: (HasArray arr k v, PrimMonad m) => Int -> Int -> Hash -> k -> v -> HashMap_ arr (PrimState m) k v -> m ()
 add entryIndex bucketIndex hashCode key value HashMap_ {buckets, hashes, links, keys, values} = do
-  collidedEntryIndex <- PrimArray.read buckets bucketIndex
-  PrimArray.write hashes entryIndex hashCode
-  PrimArray.write links entryIndex collidedEntryIndex
+  collidedEntryIndex <- Array.read buckets bucketIndex
+  Array.write hashes entryIndex hashCode
+  Array.write links entryIndex collidedEntryIndex
   Array.write keys entryIndex key
   Array.write values entryIndex value
-  PrimArray.write buckets bucketIndex entryIndex
+  Array.write buckets bucketIndex entryIndex
 {-# INLINE add #-}
 
 type BothElement arr k v = (Array.Element arr k, Array.Element arr v)
@@ -247,9 +248,9 @@ type HasArray arr k v = (BothElement arr k v, Array.Contiguous arr)
 
 resize_ :: (HasArray arr k v, PrimMonad m) => Int -> HashMap_ arr (PrimState m) k v -> m (HashMap_ arr (PrimState m) k v)
 resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
-  buckets' <- PrimArray.replicate newSize -1
-  hashes' <- PrimArray.resize hashes newSize
-  links' <- PrimArray.resize links newSize
+  buckets' <- Array.replicateMut newSize -1
+  hashes' <- Array.resize hashes newSize
+  links' <- Array.resize links newSize
   keys' <- Array.new newSize
   values' <- Array.new newSize
   bucketSize <- Array.sizeMut buckets
@@ -259,13 +260,13 @@ resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
   -- Array.copyMut values' 0 values 0 $ Array.size buckets
 
   let go entryIndex
-        | entryIndex < PrimArray.lengthM buckets = do
-            hashCode <- PrimArray.read hashes' entryIndex
+        | entryIndex < bucketsSize buckets = do
+            hashCode <- Array.read hashes' entryIndex
             when (hashCode /= -1) $ do
               let bucketIndex = hashCode `rem` newSize
-              collidedEntryIndex <- PrimArray.read buckets' bucketIndex
-              PrimArray.write links' entryIndex collidedEntryIndex
-              PrimArray.write buckets' bucketIndex entryIndex
+              collidedEntryIndex <- Array.read buckets' bucketIndex
+              Array.write links' entryIndex collidedEntryIndex
+              Array.write buckets' bucketIndex entryIndex
             go $ entryIndex + 1
         | otherwise = pure ()
   go 0
@@ -286,14 +287,18 @@ getPrime n
   | otherwise = go 0
   where
     go !i = do
-      let !p = PrimArray.index primes i
+      let !p = Array.index primes i
       if p >= n
         then p
         else go $ i + 1
 {-# INLINE getPrime #-}
 
 maxPrime :: Int
-maxPrime = PrimArray.index primes $ PrimArray.length primes - 1
+maxPrime = Array.index primes $ Array.size primes - 1
+
+bucketsSize :: MutableArray s a -> Int
+bucketsSize = sizeofMutableArray
+{-# INLINE bucketsSize #-}
 
 {- ORMOLU_DISABLE -}
 primes :: PrimArray Int

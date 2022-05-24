@@ -71,13 +71,12 @@ library
   include-dirs: include
   exposed-modules:
     Data.HashMap.Mutable
-    Data.HashMap.Mutable.Generic
-    Data.HashMap.Mutable.Internal
-    Data.HashMap.Mutable.Internal.Array
-    Data.HashMap.Mutable.Internal.PrimArray
-    Data.HashMap.Mutable.Internal.Utils
-    Data.HashMap.Mutable.Internal.Basic
-    Data.HashMap.Mutable.Internal.Generic
+      Data.HashMap.Mutable.Generic
+      Data.HashMap.Mutable.Internal
+        Data.HashMap.Mutable.Internal.Array
+        Data.HashMap.Mutable.Internal.Utils
+        Data.HashMap.Mutable.Internal.Basic
+        Data.HashMap.Mutable.Internal.Generic
     -- generated moduless
     Data.HashMap.Mutable.Boxed
     Data.HashMap.Mutable.Boxed.Small
