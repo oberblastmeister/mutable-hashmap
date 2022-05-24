@@ -19,8 +19,6 @@ insertMonotonic n new insert = do
   pure map
 {-# NOINLINE insertMonotonic #-}
 
--- insertByteStringMonotonic :: [ByteString] -> (Int -> IO h)
-
 vhfind :: Int -> VH.Dictionary (PrimState IO) VBM.MVector Int VBM.MVector Int -> IO Int
 vhfind n ht = do
   let go !i !s

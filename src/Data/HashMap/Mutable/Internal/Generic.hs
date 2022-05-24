@@ -9,11 +9,11 @@ import Data.Functor ((<&>))
 -- import Data.HashMap.Mutable.Internal.Array qualified as Array
 import Data.Hashable (Hashable)
 import Data.Hashable qualified as Hashable
-import Data.Primitive.Array (sizeofMutableArray, MutableArray)
 import Data.Primitive.Contiguous qualified as Array
 import Data.Primitive.MutVar
-import Data.Primitive.PrimArray (PrimArray, primArrayFromList)
+import Data.Primitive.PrimArray (PrimArray, primArrayFromList, MutablePrimArray, sizeofMutablePrimArray)
 import GHC.Exts qualified as Exts
+import Data.Primitive (Prim)
 
 type role HashMap nominal nominal nominal nominal
 
@@ -24,15 +24,15 @@ data HashMap_ arr s k v = -- | Invariants: buckets, hashes, links, keys, and val
   -- Entries are only valid from indices 0..size, exclusive on size
   HashMap_
   { -- | Invariant: Must be of length 3
-    refs :: !(MutableArray s Int),
+    refs :: !(MutablePrimArray s Int),
     -- | A mapping from the hash code modulo the buckets size to an entryIndex
     -- code style, use this array whenever you want to query the size of the HashMap
-    buckets :: !(MutableArray s Int),
+    buckets :: !(MutablePrimArray s Int),
     -- | Invariant: The hash code for a particular entryIndex is set to -1 to signify a deleted element
     -- This is needed when iterating over the map, when we go through the entries instead of buckets
-    hashes :: !(MutableArray s Hash),
+    hashes :: !(MutablePrimArray s Hash),
     -- | Invariant: The link for a particular entryIndex is -1 when there is no link, the end of the linked list of indices
-    links :: !(MutableArray s Int),
+    links :: !(MutablePrimArray s Int),
     keys :: !((Array.Mutable arr) s k),
     values :: !((Array.Mutable arr) s v)
   }
@@ -71,7 +71,7 @@ newWithCapacity_ capacity = do
 {-# INLINE newWithCapacity_ #-}
 
 capacity_ :: HashMap_ arr s k v -> Int
-capacity_ HashMap_ {buckets} = sizeofMutableArray buckets
+capacity_ HashMap_ {buckets} = sizeofMutablePrimArray buckets
 {-# INLINE capacity_ #-}
 
 size_ :: PrimMonad m => HashMap_ arr (PrimState m) k v -> m Int
@@ -296,8 +296,8 @@ getPrime n
 maxPrime :: Int
 maxPrime = Array.index primes $ Array.size primes - 1
 
-bucketsSize :: MutableArray s a -> Int
-bucketsSize = sizeofMutableArray
+bucketsSize :: Prim a => MutablePrimArray s a -> Int
+bucketsSize = sizeofMutablePrimArray
 {-# INLINE bucketsSize #-}
 
 {- ORMOLU_DISABLE -}
