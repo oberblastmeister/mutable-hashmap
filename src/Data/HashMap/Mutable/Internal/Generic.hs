@@ -14,6 +14,7 @@ import Data.Primitive.MutVar
 import Data.Primitive.PrimArray (PrimArray, primArrayFromList, MutablePrimArray, sizeofMutablePrimArray)
 import GHC.Exts qualified as Exts
 import Data.Primitive (Prim)
+import qualified Data.Primitive.Contiguous.Class as Array
 
 type role HashMap nominal nominal nominal nominal
 
@@ -33,8 +34,8 @@ data HashMap_ arr s k v = -- | Invariants: buckets, hashes, links, keys, and val
     hashes :: !(MutablePrimArray s Hash),
     -- | Invariant: The link for a particular entryIndex is -1 when there is no link, the end of the linked list of indices
     links :: !(MutablePrimArray s Int),
-    keys :: !((Array.Mutable arr) s k),
-    values :: !((Array.Mutable arr) s v)
+    keys :: !((Array.UnliftedMut arr) s k),
+    values :: !((Array.UnliftedMut arr) s v)
   }
 
 type role HashMap_ nominal nominal nominal nominal
@@ -67,7 +68,7 @@ newWithCapacity_ capacity = do
   links <- Array.new capacity'
   keys <- Array.new capacity'
   values <- Array.new capacity'
-  pure HashMap_ {refs, buckets, hashes, links, keys, values}
+  pure HashMap_ {refs, buckets, hashes, links, keys = Array.unliftMut keys, values = Array.unliftMut values}
 {-# INLINE newWithCapacity_ #-}
 
 capacity_ :: HashMap_ arr s k v -> Int
@@ -95,8 +96,8 @@ toList HashMap {var} = do
             if hashCode == -1
               then go (i - 1) xs
               else do
-                key <- Array.read keys i
-                value <- Array.read values i
+                key <- Array.read (Array.liftMut keys) i
+                value <- Array.read (Array.liftMut values) i
                 go (i - 1) ((key, value) : xs)
   size <- Array.read refs sizeRef
   go (size - 1) []
@@ -112,8 +113,8 @@ unsafeToList HashMap {var} = do
             if hashCode == -1
               then go $ i - 1
               else do
-                key <- Array.read keys i
-                value <- Array.read values i
+                key <- Array.read (Array.liftMut keys) i
+                value <- Array.read (Array.liftMut values) i
                 xs <- unsafeInterleave $ go $ i - 1
                 pure $ (key, value) : xs
   size <- Array.read refs sizeRef
@@ -130,7 +131,7 @@ lookup' hash key HashMap {var} = do
   i <- lookupIndex_ hash key map
   if i == -1
     then pure Nothing
-    else Just <$> Array.read values i
+    else Just <$> Array.read (Array.liftMut values) i
 {-# INLINE lookup' #-}
 
 lookupIndex_ :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap_ arr (PrimState m) k v -> m Int
@@ -142,7 +143,7 @@ lookupIndex_ hash key HashMap_ {buckets, hashes, keys, links} = do
             hashCode' <- Array.read hashes i
             if hashCode == hashCode'
               then do
-                key' <- Array.read keys i
+                key' <- Array.read (Array.liftMut keys) i
                 if key == key'
                   then pure i
                   else go =<< Array.read links i
@@ -165,7 +166,7 @@ delete' hash key HashMap {var} = do
             hashCode' <- Array.read hashes entryIndex
             if hashCode == hashCode'
               then do
-                key' <- Array.read keys entryIndex
+                key' <- Array.read (Array.liftMut keys) entryIndex
                 if key == key'
                   then do
                     next <- Array.read links entryIndex
@@ -174,8 +175,8 @@ delete' hash key HashMap {var} = do
                       else Array.write links prevIndex next
                     Array.write hashes entryIndex -1
                     Array.write links entryIndex =<< Array.read refs freeListRef
-                    Array.write keys entryIndex undefinedElem
-                    Array.write values entryIndex undefinedElem
+                    Array.write (Array.liftMut keys) entryIndex undefinedElem
+                    Array.write (Array.liftMut values) entryIndex undefinedElem
                     Array.write refs freeListRef entryIndex
                     Array.write refs freeSizeRef =<< (+ 1) <$> Array.read refs freeSizeRef
                   else go entryIndex =<< Array.read links entryIndex
@@ -201,9 +202,9 @@ insert_' hash key value HashMap {var} map@HashMap_ {refs, buckets, hashes, links
             hashCode' <- Array.read hashes entryIndex
             if hashCode == hashCode'
               then do
-                key' <- Array.read keys entryIndex
+                key' <- Array.read (Array.liftMut keys) entryIndex
                 if key == key'
-                  then Array.write values entryIndex value
+                  then Array.write (Array.liftMut values) entryIndex value
                   else go =<< Array.read links entryIndex
               else go =<< Array.read links entryIndex
         | otherwise = addOrResize
@@ -237,14 +238,14 @@ add entryIndex bucketIndex hashCode key value HashMap_ {buckets, hashes, links, 
   collidedEntryIndex <- Array.read buckets bucketIndex
   Array.write hashes entryIndex hashCode
   Array.write links entryIndex collidedEntryIndex
-  Array.write keys entryIndex key
-  Array.write values entryIndex value
+  Array.write (Array.liftMut keys) entryIndex key
+  Array.write (Array.liftMut values) entryIndex value
   Array.write buckets bucketIndex entryIndex
 {-# INLINE add #-}
 
 type BothElement arr k v = (Array.Element arr k, Array.Element arr v)
 
-type HasArray arr k v = (BothElement arr k v, Array.Contiguous arr)
+type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr)
 
 resize_ :: (HasArray arr k v, PrimMonad m) => Int -> HashMap_ arr (PrimState m) k v -> m (HashMap_ arr (PrimState m) k v)
 resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
@@ -255,8 +256,8 @@ resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
   values' <- Array.new newSize
   bucketSize <- Array.sizeMut buckets
   -- Array.copyMut keys' 0 keys 0 $ Array.size buckets
-  Array.copyMut keys' 0 $ Array.sliceMut keys 0 bucketSize
-  Array.copyMut values' 0 $ Array.sliceMut values 0 bucketSize
+  Array.copyMut keys' 0 $ Array.sliceMut (Array.liftMut keys) 0 bucketSize
+  Array.copyMut values' 0 $ Array.sliceMut (Array.liftMut values) 0 bucketSize
   -- Array.copyMut values' 0 values 0 $ Array.size buckets
 
   let go entryIndex
@@ -276,8 +277,8 @@ resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
       { buckets = buckets',
         hashes = hashes',
         links = links',
-        keys = keys',
-        values = values'
+        keys = Array.unliftMut keys',
+        values = Array.unliftMut values'
       }
 {-# INLINE resize_ #-}
 
