@@ -255,10 +255,8 @@ resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
   keys' <- Array.new newSize
   values' <- Array.new newSize
   bucketSize <- Array.sizeMut buckets
-  -- Array.copyMut keys' 0 keys 0 $ Array.size buckets
   Array.copyMut keys' 0 $ Array.sliceMut (Array.liftMut keys) 0 bucketSize
   Array.copyMut values' 0 $ Array.sliceMut (Array.liftMut values) 0 bucketSize
-  -- Array.copyMut values' 0 values 0 $ Array.size buckets
 
   let go entryIndex
         | entryIndex < bucketsSize buckets = do
