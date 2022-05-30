@@ -30,7 +30,7 @@ vhfind n ht = do
 
 main :: IO ()
 main = do
-  let inputs = [1000, 10000, 100000, 1000000]
+  let inputs = [100, 1000, 10000, 100000, 1000000]
   comparisonBench <- mapM comparisonBenches inputs
   defaultMain
     [ bgroup "comparison" comparisonBench
