@@ -4,10 +4,9 @@ module Data.HashMap.Mutable.Internal.Generic where
 
 import Control.Monad (forM_, when)
 import Control.Monad.Primitive
+import Control.Monad.ST (runST)
 import Data.Bits ((.&.))
 import Data.Functor ((<&>))
--- import Data.HashMap.Mutable.Internal.Array qualified as Array
-
 import Data.HashMap.Mutable.Internal.Primes qualified as Primes
 import Data.Hashable (Hashable)
 import Data.Hashable qualified as Hashable
@@ -16,6 +15,7 @@ import Data.Primitive.Contiguous qualified as Array
 import Data.Primitive.Contiguous.Class qualified as Array
 import Data.Primitive.MutVar
 import Data.Primitive.PrimArray (MutablePrimArray, sizeofMutablePrimArray)
+import Data.Proxy (Proxy)
 import GHC.Exts qualified as Exts
 
 type role HashMap nominal nominal nominal nominal
@@ -125,7 +125,7 @@ unsafeToList HashMap {var} = do
 {-# INLINEABLE unsafeToList #-}
 
 lookup :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> HashMap arr (PrimState m) k v -> m (Maybe v)
-lookup key = lookup' (Hashable.hash key) key
+lookup key = Exts.inline lookup' (Hashable.hash key) key
 {-# INLINE lookup #-}
 
 lookup' :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap arr (PrimState m) k v -> m (Maybe v)
@@ -135,7 +135,17 @@ lookup' hash key HashMap {var} = do
   if i == -1
     then pure Nothing
     else Just <$> Array.read (Array.liftMut values) i
-{-# INLINE lookup' #-}
+{-# INLINEABLE lookup' #-}
+
+member :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> HashMap arr (PrimState m) k v -> m Bool
+member k = Exts.inline member' (Hashable.hash k) k
+{-# INLINE member #-}
+
+member' :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap arr (PrimState m) k v -> m Bool
+member' hash key HashMap {var} = do
+  i <- lookupIndex_ hash key =<< readMutVar var
+  pure $ i == -1
+{-# INLINEABLE member' #-}
 
 lookupIndex_ :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap_ arr (PrimState m) k v -> m Int
 lookupIndex_ hash key HashMap_ {buckets, hashes, keys, links} = do
@@ -282,6 +292,30 @@ resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
         values = Array.unliftMut values'
       }
 {-# INLINE resize_ #-}
+
+nubHash :: (HasArray arr v (), Hashable v) => Proxy arr -> [v] -> [v]
+nubHash p = nubHashOn p id
+{-# INLINE nubHash #-}
+
+nubHashOn :: (HasArray arr k (), Hashable k) => Proxy arr -> (v -> k) -> [v] -> [v]
+nubHashOn p on xs = Exts.build $ \c n -> nubHashOnWith p on c n xs
+{-# INLINE nubHashOn #-}
+
+nubHashOnWith :: forall arr k v r. (HasArray arr k (), Hashable k) => Proxy arr -> (v -> k) -> (v -> r -> r) -> r -> [v] -> r
+nubHashOnWith _ on c n xs = runST $ do
+  m <- new @arr
+  let go [] = pure n
+      go (x : xs) = do
+        let k = on x
+        mem <- member k m
+        if mem
+          then go xs
+          else do
+            insert k () m
+            r <- unsafeInterleave $ go xs
+            pure $ c x r
+  go xs
+{-# INLINE nubHashOnWith #-}
 
 bucketsSize :: Prim a => MutablePrimArray s a -> Int
 bucketsSize = sizeofMutablePrimArray

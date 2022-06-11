@@ -53,8 +53,8 @@ common common-options
     -- until OverloadedRecordUpdate stabilizes
     -Wno-ambiguous-fields
     -Wno-partial-type-signatures
-    -Werror=incomplete-patterns
-    -Werror=incomplete-uni-patterns
+    -- -Werror=incomplete-patterns
+    -- -Werror=incomplete-uni-patterns
     -Werror=missing-methods
     -Werror=incomplete-record-updates
     -Wcpp-undef
@@ -79,12 +79,15 @@ library
         Data.HashMap.Mutable.Internal.Basic
         Data.HashMap.Mutable.Internal.Generic
     -- generated modules
-    Data.HashMap.Mutable.Boxed
+    -- Data.HashMap.Mutable.Boxed
     Data.HashMap.Mutable.Boxed.Small
     Data.HashMap.Mutable.Prim
     Data.HashMap.Mutable.Unlifted
   if flag(debug)
-    cpp-options: -DASSERTS
+    cpp-options: -DDEBUG
+    if impl(ghc >= 9.2.2)
+      ghc-options: -fcheck-prim-bounds
+
   -- For dumping the generated code:
   -- ghc-options: -ddump-simpl -ddump-stg-final -ddump-cmm -ddump-asm -ddump-to-file
   -- ghc-options: -dsuppress-coercions -dsuppress-unfoldings -dsuppress-module-prefixes
@@ -104,10 +107,12 @@ test-suite mutable-hashmap-test
   other-modules:
     Data.HashMap.MutableSpec
     GenerateSpec
+    GenerateHelper
   build-depends:
     mutable-hashmap,
     vector-hashtables ^>= 0.1.1.1,
     vector ^>= 0.12.3.1,
+    containers ^>= 0.6.5.1,
     unordered-containers ^>= 0.2.19.1,
     hspec ^>= 2.9.4,
     QuickCheck ^>= 2.14.2,
@@ -116,6 +121,9 @@ test-suite mutable-hashmap-test
     filepath ^>= 1.4.2.2,
     text ^>= 1.2.5.0,
     neat-interpolation ^>= 0.5.1.3,
+    template-haskell ^>= 2.18.0.0,
+    syb ^>= 0.7.2.1,
+    th-abstraction ^>= 0.4.3.0,
   build-tool-depends:
     hspec-discover:hspec-discover,
 

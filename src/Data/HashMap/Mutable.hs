@@ -1,3 +1,3 @@
-module Data.HashMap.Mutable (module M) where
+module Data.HashMap.Mutable () where
 
-import Data.HashMap.Mutable.Boxed as M
+-- import Data.HashMap.Mutable.Boxed as M

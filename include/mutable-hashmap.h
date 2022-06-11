@@ -1,4 +1,4 @@
-#if defined(ASSERTS)
+#if defined(DEBUG)
 -- This fugly hack is brought by GHC's apparent reluctance to deal
 -- with MagicHash and UnboxedTuples when inferring types. Eek!
 # define CHECK_BOUNDS(_func_,_len_,_k_) \
