@@ -23,7 +23,7 @@ type role HashMap nominal nominal nominal nominal
 newtype HashMap arr s k v = HashMap {var :: MutVar s (HashMap_ arr s k v)}
 
 data HashMap_ arr s k v = -- | Invariants: buckets, hashes, links, keys, and values must all be the same size
-  -- A value with the same index in hashes, links, and keys forms an entry. The index is called the entryIndex.
+  -- A value with the same index in hashes, links, keys, and values forms an entry. The index is called the entryIndex.
   -- Entries are only valid from indices 0..size, exclusive on size
   -- TODO: use one array for the control stuff
   HashMap_
