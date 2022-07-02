@@ -73,13 +73,12 @@ library
     Data.HashMap.Mutable
       Data.HashMap.Mutable.Generic
       Data.HashMap.Mutable.Internal
-        Data.HashMap.Mutable.Internal.Array
         Data.HashMap.Mutable.Internal.Utils
         Data.HashMap.Mutable.Internal.Primes
         Data.HashMap.Mutable.Internal.Basic
         Data.HashMap.Mutable.Internal.Generic
     -- generated modules
-    -- Data.HashMap.Mutable.Boxed
+    Data.HashMap.Mutable.Boxed
     Data.HashMap.Mutable.Boxed.Small
     Data.HashMap.Mutable.Prim
     Data.HashMap.Mutable.Unlifted
@@ -107,7 +106,6 @@ test-suite mutable-hashmap-test
   other-modules:
     Data.HashMap.MutableSpec
     GenerateSpec
-    GenerateHelper
   build-depends:
     mutable-hashmap,
     vector-hashtables ^>= 0.1.1.1,
@@ -121,9 +119,6 @@ test-suite mutable-hashmap-test
     filepath ^>= 1.4.2.2,
     text ^>= 1.2.5.0,
     neat-interpolation ^>= 0.5.1.3,
-    template-haskell ^>= 2.18.0.0,
-    syb ^>= 0.7.2.1,
-    th-abstraction ^>= 0.4.3.0,
   build-tool-depends:
     hspec-discover:hspec-discover,
 
@@ -132,6 +127,8 @@ benchmark mutable-hashmap-bench
   type: exitcode-stdio-1.0
   hs-source-dirs: bench
   main-is: Main.hs
+  other-modules:
+    IsMap
   ghc-options: -O2
   build-depends:
     mutable-hashmap,
@@ -141,3 +138,8 @@ benchmark mutable-hashmap-bench
     unordered-containers ^>= 0.2.19.1,
     vector ^>= 0.12.3.1,
     bytestring ^>= 0.11.0.0,
+    random ^>= 1.2.1.1,
+    perfect-vector-shuffle ^>= 0.1.1.1,
+    mtl ^>= 2.2.2,
+    MonadRandom ^>= 0.5.3,
+    constraints ^>= 0.13.4,

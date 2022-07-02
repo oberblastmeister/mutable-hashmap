@@ -3,40 +3,19 @@
 
 module GenerateSpec where
 
-import Data.HashMap.Mutable.Generic qualified as Generic
-import Data.Map.Strict qualified as Map
-import Data.Primitive qualified as Primitive
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import GenerateHelper (textE)
-import GenerateHelper qualified
-import Generics.SYB qualified as SYB
-import Language.Haskell.TH (Q)
-import Language.Haskell.TH qualified as TH
-import Language.Haskell.TH.Datatype (applySubstitution)
 import NeatInterpolation (trimming)
 import System.Directory (makeAbsolute)
 import System.Directory qualified as Directory
 import System.FilePath ((<.>), (</>))
 import System.FilePath qualified as FilePath
 import Test.Hspec
-import Test.Hspec.QuickCheck
 
 spec :: Spec
 spec = do
   it "generate files" $ do
-    GenerateHelper.writeModuleContents
-      "Data.HashMap.Mutable.Boxed"
-      $( textE
-           =<< GenerateHelper.generateInstantiatedModule
-             "Data.HashMap.Mutable.Boxed"
-             [ (['Generic.fromList], [t|Primitive.Array|])
-             ]
-       )
-    pure @IO ()
-
-  xit "generate files" $ do
     mapM_
       (uncurry writeModule)
       [ ("Data.HashMap.Mutable.Boxed", "Primitive.Array"),
