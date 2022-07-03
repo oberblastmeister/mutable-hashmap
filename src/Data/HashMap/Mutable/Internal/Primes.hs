@@ -4,7 +4,6 @@ module Data.HashMap.Mutable.Internal.Primes (getPrime, maxPrime) where
 
 import Data.Primitive.Contiguous qualified as Array
 import Data.Primitive.PrimArray (PrimArray, primArrayFromList)
-import GHC.Exts (UnliftedType)
 
 getPrime :: Int -> Int
 getPrime n
