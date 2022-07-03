@@ -131,7 +131,7 @@ benchmark mutable-hashmap-bench
   hs-source-dirs: bench
   main-is: Main.hs
   other-modules:
-    IsMap
+    MapFunctions
   ghc-options: -O2
   build-depends:
     mutable-hashmap,
