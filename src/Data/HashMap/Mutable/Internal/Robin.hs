@@ -39,7 +39,7 @@ new = Exts.inline newWithCapacity defaultCapacity
 {-# INLINEABLE new #-}
 
 defaultCapacity :: Int
-defaultCapacity = 16
+defaultCapacity = 10
 
 newWithCapacity :: (HasArray arr k v, PrimMonad m) => Int -> m (HashMap arr (PrimState m) k v)
 newWithCapacity capacity = newWithCapacity_ capacity >>= MutVar.newMutVar <&> HashMap
@@ -71,7 +71,9 @@ insert key value HashMap {var} = do
       then do
         let newCapacity = Primes.getPrime $! capacity * 2
         Array.write refs thresholdIx $! getThreshold newCapacity
-        resize_ newCapacity map
+        map <- resize_ newCapacity map
+        MutVar.writeMutVar var map
+        pure map
       else pure map
   insert_ key value map
   Array.write refs sizeIx =<< (1 +) <$> Array.read refs sizeIx

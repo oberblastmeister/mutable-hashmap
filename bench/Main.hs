@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 
 module Main where
@@ -7,8 +8,9 @@ import Control.Monad.Random (MonadRandom)
 import Control.Monad.Random.Strict qualified as Monad.Random
 import Criterion.Main
 import Data.Constraint (Dict (..))
+import Data.Constraint qualified as Constraint
 import Data.Foldable qualified as Foldable
-import Data.HashMap.Mutable.Internal.Generic qualified as HashMap.Mutable.Arena
+import Data.HashMap.Mutable qualified as HashMap.Mutable.Arena
 import Data.HashMap.Mutable.Internal.Robin qualified as HashMap.Mutable.Robin
 import Data.HashTable.IO qualified as HashTable
 import Data.Primitive (Array)
@@ -17,6 +19,7 @@ import Data.Vector qualified as VB
 import Data.Vector.Hashtables qualified as Vector.Hashtables
 import Data.Vector.Hashtables.Internal qualified as VH
 import Data.Vector.Mutable qualified as VBM
+import GHC.Base (RealWorld)
 import Immutable.Shuffle qualified
 import IsMap (IsMap)
 import IsMap qualified
@@ -60,7 +63,7 @@ comparisonBenches n =
               whnfIO $
                 insertMonotonic
                   n
-                  (HashMap.Mutable.Arena.newWithCapacity @Array)
+                  (HashMap.Mutable.Arena.newWithCapacity)
                   HashMap.Mutable.Arena.insert,
             bench "mutable-hashmaps robin" $
               whnfIO $
@@ -81,8 +84,14 @@ comparisonBenches n =
               whnfIO $
                 insertMonotonic
                   n
-                  (const (HashMap.Mutable.Arena.new @Array))
+                  (const (HashMap.Mutable.Arena.new))
                   HashMap.Mutable.Arena.insert,
+            bench "mutable-hashmaps robin" $
+              whnfIO $
+                insertMonotonic
+                  n
+                  (const (HashMap.Mutable.Robin.new @Array))
+                  HashMap.Mutable.Robin.insert,
             bench "vector-hashtables" $
               whnfIO $
                 insertMonotonic
@@ -104,9 +113,14 @@ makeBenches _ n =
     []
     undefined
 
+data IsMapDict where
+  IsMapDict :: forall map. (Dict (IsMap map)) -> IsMapDict
+
 -- mapConstraints :: [forall map. Dict (IsMap map)]
--- mapConstraints =
---   [Dict @(IsMap Int)]
+mapDicts :: [IsMapDict]
+mapDicts =
+  [ IsMapDict (Dict @(IsMap (HashMap.Mutable.Arena.HashMap RealWorld Int Int)))
+  ]
 
 getRandomVec :: (MonadRandom m, Random a) => m (VB.Vector a)
 getRandomVec = VB.fromList <$> Monad.Random.getRandoms

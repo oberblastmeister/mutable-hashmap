@@ -1,5 +1,4 @@
 -- Generated file, do not edit!
-
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
@@ -12,6 +11,7 @@ module Data.HashMap.Mutable.MOD
     lookup,
     toList,
     fromList,
+    insert,
   )
 where
 
@@ -53,3 +53,7 @@ toList = Generic.toList
 fromList :: (HasArray ARR k v, PrimMonad m, Hashable k) => [(k, v)] -> m (HashMap (PrimState m) k v)
 fromList = Generic.fromList
 {-# INLINE fromList #-}
+
+insert :: (HasArray ARR k v, PrimMonad m, Hashable k) => k -> v -> HashMap (PrimState m) k v -> m ()
+insert = Generic.insert
+{-# INLINE insert #-}
