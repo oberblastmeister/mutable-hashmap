@@ -6,12 +6,14 @@ import Control.Monad (unless)
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Data.Functor ((<&>))
 import Data.HashMap.Mutable.Internal.Primes qualified as Primes
+import Data.HashMap.Mutable.Internal.Utils (DeleteEntry (..))
 import Data.Hashable (Hashable)
 import Data.Hashable qualified as Hashable
 import Data.Primitive (MutablePrimArray)
 import Data.Primitive.Contiguous.Class qualified as Array
 import Data.Primitive.MutVar (MutVar)
 import Data.Primitive.MutVar qualified as MutVar
+import Data.Primitive.PrimArray (setPrimArray)
 import Data.Word (Word64)
 import GHC.Exts qualified as Exts
 
@@ -24,6 +26,13 @@ data HashMap_ arr s k v = HashMap_
     values :: !((Array.UnliftedMut arr) s v)
   }
 
+data Bucket k v = Bucket
+  { hash :: !Int,
+    dist :: !Int,
+    key :: !k,
+    value :: v
+  }
+
 sizeIx, thresholdIx :: Int
 sizeIx = 0
 thresholdIx = 1
@@ -32,7 +41,7 @@ type Hash = Int
 
 type BothElement arr k v = (Array.Element arr k, Array.Element arr v)
 
-type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr)
+type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr, DeleteEntry arr)
 
 new :: (HasArray arr k v, PrimMonad m) => m (HashMap arr (PrimState m) k v)
 new = Exts.inline newWithCapacity defaultCapacity
@@ -60,7 +69,7 @@ getThreshold :: Int -> Int
 getThreshold capacity = fromIntegral $ ((fromIntegral capacity :: Word64) * 10 + 9) `div` 11
 {-# INLINE getThreshold #-}
 
-insert :: (PrimMonad m, HasArray arr k v, Hashable k) => k -> v -> HashMap arr (PrimState m) k v -> m ()
+insert :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> v -> HashMap arr (PrimState m) k v -> m ()
 insert key value HashMap {var} = do
   map@HashMap_ {refs, keys} <- MutVar.readMutVar var
   capacity <- Array.sizeMut (Array.liftMut keys)
@@ -77,7 +86,7 @@ insert key value HashMap {var} = do
   Array.write refs sizeIx =<< (1 +) <$> Array.read refs sizeIx
 {-# INLINEABLE insert #-}
 
-insert_ :: (PrimMonad m, HasArray arr k v, Hashable k) => k -> v -> HashMap_ arr (PrimState m) k v -> m ()
+insert_ :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> v -> HashMap_ arr (PrimState m) k v -> m ()
 insert_ key value HashMap_ {info, keys, values} = do
   capacity <- Array.sizeMut (Array.liftMut keys)
   let !hash = Hashable.hash key
@@ -107,7 +116,7 @@ insert_ key value HashMap_ {info, keys, values} = do
   go bucketIx 0 hash key value
 {-# INLINE insert_ #-}
 
-add_' :: (PrimMonad m, HasArray arr k v) => Hash -> k -> v -> HashMap_ arr (PrimState m) k v -> m ()
+add_' :: (HasArray arr k v, PrimMonad m) => Hash -> k -> v -> HashMap_ arr (PrimState m) k v -> m ()
 add_' hash key value HashMap_ {info, keys, values} = do
   capacity <- Array.sizeMut (Array.liftMut keys)
   let bucketIx = hash `mod` capacity
@@ -133,7 +142,7 @@ add_' hash key value HashMap_ {info, keys, values} = do
   go bucketIx 0 hash key value
 {-# INLINE add_' #-}
 
-resize_ :: (PrimMonad m, HasArray arr k v) => Int -> HashMap_ arr (PrimState m) k v -> m (HashMap_ arr (PrimState m) k v)
+resize_ :: (HasArray arr k v, PrimMonad m) => Int -> HashMap_ arr (PrimState m) k v -> m (HashMap_ arr (PrimState m) k v)
 resize_ newCapacity map@HashMap_ {info, keys, values} = do
   info' <- Array.replicateMut (newCapacity * 2) 0
   keys' <- Array.new newCapacity
@@ -152,7 +161,7 @@ resize_ newCapacity map@HashMap_ {info, keys, values} = do
   pure map'
 {-# INLINE resize_ #-}
 
-lookup :: (PrimMonad m, HasArray arr k v, Hashable k) => k -> HashMap arr (PrimState m) k v -> m (Maybe v)
+lookup :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> HashMap arr (PrimState m) k v -> m (Maybe v)
 lookup key HashMap {var} = do
   map@HashMap_ {values} <- MutVar.readMutVar var
   i <- lookupIndex_' (Hashable.hash key) key map
@@ -164,7 +173,7 @@ lookup key HashMap {var} = do
 {-# INLINEABLE lookup #-}
 
 -- returns -1 if the key could not be found
-lookupIndex_' :: (PrimMonad m, HasArray arr k v, Eq k) => Hash -> k -> HashMap_ arr (PrimState m) k v -> m Int
+lookupIndex_' :: (HasArray arr k v, PrimMonad m, Eq k) => Hash -> k -> HashMap_ arr (PrimState m) k v -> m Int
 lookupIndex_' !hash !key HashMap_ {info, keys} = do
   capacity <- Array.sizeMut (Array.liftMut keys)
   let bucketIx = hash `mod` capacity
@@ -181,5 +190,44 @@ lookupIndex_' !hash !key HashMap_ {info, keys} = do
   go bucketIx 0
 {-# INLINE lookupIndex_' #-}
 
-delete_ :: (PrimMonad m, HasArray arr k v) => k -> v -> HashMap_ arr (PrimState m) k v -> m ()
-delete_ key value HashMap_ {info, keys, values} = undefined
+delete :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> HashMap arr (PrimState m) k v -> m ()
+delete k HashMap {var} = delete_ k =<< MutVar.readMutVar var
+{-# INLINEABLE delete #-}
+
+delete_ :: (HasArray arr k v, PrimMonad m, Hashable k) => k -> HashMap_ arr (PrimState m) k v -> m ()
+delete_ key map@HashMap_ {info, keys, values} = do
+  capacity <- Array.sizeMut (Array.liftMut keys)
+  let hash = Hashable.hash key
+  i <- lookupIndex_' hash key map
+  if i == -1
+    then pure ()
+    else do
+      let go !i !j = do
+            dist <- Array.read info (j * 2 + 1)
+            if dist == 0
+              then do
+                setPrimArray info (i * 2) 2 0
+                deleteEntry (Array.liftMut keys) i
+                deleteEntry (Array.liftMut values) j
+              else do
+                writeBucket map i =<< readBucket map j
+                go j ((j + 1) `mod` capacity)
+      go i ((i + 1) `mod` capacity)
+{-# INLINE delete_ #-}
+
+readBucket :: (HasArray arr k v, PrimMonad m) => HashMap_ arr (PrimState m) k v -> Int -> m (Bucket k v)
+readBucket HashMap_ {info, keys, values} i = do
+  hash <- Array.read info $ i * 2
+  dist <- Array.read info $ i * 2 + 1
+  key <- Array.read (Array.liftMut keys) i
+  value <- Array.read (Array.liftMut values) i
+  pure Bucket {hash, dist, key, value}
+{-# INLINE readBucket #-}
+
+writeBucket :: (HasArray arr k v, PrimMonad m) => HashMap_ arr (PrimState m) k v -> Int -> Bucket k v -> m ()
+writeBucket HashMap_ {info, keys, values} i Bucket {hash, dist, key, value} = do
+  Array.write info (i * 2) hash
+  Array.write info (i * 2 + 1) dist
+  Array.write (Array.liftMut keys) i key
+  Array.write (Array.liftMut values) i value
+{-# INLINE writeBucket #-}

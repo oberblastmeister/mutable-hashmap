@@ -8,6 +8,7 @@ import Control.Monad.ST (runST)
 import Data.Bits ((.&.))
 import Data.Functor ((<&>))
 import Data.HashMap.Mutable.Internal.Primes qualified as Primes
+import Data.HashMap.Mutable.Internal.Utils (DeleteEntry (..))
 import Data.Hashable (Hashable)
 import Data.Hashable qualified as Hashable
 import Data.Primitive (Prim)
@@ -45,7 +46,7 @@ type role HashMap_ nominal nominal nominal nominal
 
 type BothElement arr k v = (Array.Element arr k, Array.Element arr v)
 
-type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr)
+type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr, DeleteEntry arr)
 
 sizeRef, freeSizeRef, freeListRef :: Int
 sizeRef = 0
@@ -192,8 +193,8 @@ delete' hash key HashMap {var} = do
                       else Array.write links prevIndex next
                     Array.write hashes entryIndex -1
                     Array.write links entryIndex =<< Array.read refs freeListRef
-                    Array.write (Array.liftMut keys) entryIndex undefinedElem
-                    Array.write (Array.liftMut values) entryIndex undefinedElem
+                    deleteEntry (Array.liftMut keys) entryIndex
+                    deleteEntry (Array.liftMut values) entryIndex
                     Array.write refs freeListRef entryIndex
                     Array.write refs freeSizeRef =<< (+ 1) <$> Array.read refs freeSizeRef
                   else go entryIndex =<< Array.read links entryIndex
@@ -320,10 +321,6 @@ nubHashOnWith _ on c n xs = runST $ do
 bucketsSize :: Prim a => MutablePrimArray s a -> Int
 bucketsSize = sizeofMutablePrimArray
 {-# INLINE bucketsSize #-}
-
-undefinedElem :: forall a. a
-undefinedElem = error "Undefined element"
-{-# NOINLINE undefinedElem #-}
 
 hashMask :: Int
 hashMask = maxBound

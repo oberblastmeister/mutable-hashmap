@@ -1,11 +1,12 @@
 module MapFunctions where
 
 import Data.Functor (($>))
-import Data.HashMap.Mutable qualified as Arena
+import Data.HashMap.Mutable.Internal.Generic qualified as Arena
 import Data.HashMap.Mutable.Internal.Robin qualified as Robin
 import Data.HashMap.Strict qualified as Data.HashMap
 import Data.Hashable (Hashable)
 import Data.Primitive.Array (Array)
+import Data.Primitive.PrimArray (PrimArray)
 import Data.Vector.Hashtables qualified as Vector.Hashtables
 import Data.Vector.Mutable qualified as VBM
 
@@ -22,7 +23,7 @@ arenaFunctions :: Hashable k => MapFunctions k v
 arenaFunctions =
   MapFunctions
     { name = "mutable-hashmap arena",
-      new = Arena.new,
+      new = Arena.new @Array,
       insert = \key value map -> Arena.insert key value map $> map,
       delete = \key map -> Arena.delete key map $> map,
       lookup = \key map -> Arena.lookup key map
@@ -35,8 +36,7 @@ robinFunctions =
     { name = "mutable-hashmap robin",
       new = Robin.new @Array,
       insert = \key value map -> Robin.insert key value map $> map,
-      -- delete = \key value map -> Robin.delete key value map $> map,
-      delete = undefined,
+      delete = \key map -> Robin.delete key map $> map,
       lookup = \key map -> Robin.lookup key map
     }
 {-# SPECIALIZE robinFunctions :: MapFunctions Int Int #-}
@@ -71,3 +71,29 @@ allMapFunctions =
     unorderedContainersFunctions
   ]
 {-# SPECIALIZE allMapFunctions :: [MapFunctions Int Int] #-}
+
+unboxedArenaFunctions :: MapFunctions Int Int
+unboxedArenaFunctions =
+  MapFunctions
+    { name = "mutable-hashmap unboxed arena",
+      new = Arena.new @PrimArray,
+      insert = \key value map -> Arena.insert key value map $> map,
+      delete = \key map -> Arena.delete key map $> map,
+      lookup = \key map -> Arena.lookup key map
+    }
+
+unboxedRobinFunctions :: MapFunctions Int Int
+unboxedRobinFunctions =
+  MapFunctions
+    { name = "mutable-hashmap unboxed robin",
+      new = Robin.new @PrimArray,
+      insert = \key value map -> Robin.insert key value map $> map,
+      delete = \key map -> Robin.delete key map $> map,
+      lookup = \key map -> Robin.lookup key map
+    }
+
+unboxedIntMapFunctions :: [MapFunctions Int Int]
+unboxedIntMapFunctions =
+  [ unboxedArenaFunctions,
+    unboxedRobinFunctions
+  ]

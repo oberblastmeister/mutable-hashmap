@@ -1,6 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE ImpredicativeTypes #-}
-
 module Main where
 
 import Control.Exception (evaluate)
@@ -13,6 +10,7 @@ import Data.Foldable qualified as Foldable
 import Data.Functor ((<&>))
 import Data.HashMap.Mutable qualified as HashMap.Mutable.Arena
 import Data.HashMap.Mutable.Internal.Robin qualified as HashMap.Mutable.Robin
+import Data.Kind (Type)
 import Data.Primitive (Array)
 import Data.Vector qualified as VB
 import Data.Vector.Hashtables qualified as Vector.Hashtables
@@ -130,27 +128,30 @@ makeIntBenches n =
     withEnv ~(stdGen, fullInts, fullIntsShuffled, rangeInts) =
       bgroup
         "int"
-        [ lookupFullBenches,
+        [ allBenches,
+          lookupFullBenches,
           lookupMissBenches,
           insertFullBenches,
           insertRangeBenches
         ]
       where
+        mapFunctions = MapFunctions.allMapFunctions ++ MapFunctions.unboxedIntMapFunctions
+
         allBenches =
           bgroup "all" $
-            MapFunctions.allMapFunctions
-              <&> \fs -> bench (name fs) (whnfIO (benchAll fs fullInts))
+            mapFunctions
+              <&> \fs -> bench (name fs) (whnfIO $ (benchAll fs fullInts))
         insertFullBenches =
           bgroup "insertFull" $
-            MapFunctions.allMapFunctions
-              <&> \fs -> bench (name fs) (whnfIO (benchInsert fs fullInts))
+            mapFunctions
+              <&> \fs -> bench (name fs) (whnfIO $ benchInsert fs fullInts)
         insertRangeBenches =
           bgroup "insertRange" $
-            MapFunctions.allMapFunctions
+            mapFunctions
               <&> \fs -> bench (name fs) (whnfIO $ benchInsert fs rangeInts)
         lookupFullBenches =
           bgroup "lookupFull" $
-            MapFunctions.allMapFunctions
+            mapFunctions
               <&> \fs -> bench (name fs) (whnfIO $ benchLookup fs fullInts fullIntsShuffled)
         lookupMissBenches =
           env
@@ -163,10 +164,8 @@ makeIntBenches n =
           where
             withEnv ~(is, is') =
               bgroup "lookupMiss" $
-                MapFunctions.allMapFunctions
+                mapFunctions
                   <&> \fs -> bench (name fs) (whnfIO $ benchLookup fs is is')
-
--- benches =
 
 getRandomVec :: (Random a, MonadRandom m) => m (VB.Vector a)
 getRandomVec = VB.fromList <$> Monad.Random.getRandoms
@@ -180,22 +179,26 @@ getFullInts n r = VB.generateM n $ \_ -> Monad.Random.getRandomR r
 getShuffledRangeInts :: (MonadRandom m, PrimMonad m) => (Int, Int) -> m (VB.Vector Int)
 getShuffledRangeInts (i, j) = Immutable.Shuffle.shuffleM $ VB.enumFromTo i j
 
-benchInsert :: MapFunctions k k -> VB.Vector k -> IO ()
+benchInsert :: MapFunctions k k -> VB.Vector k -> IO Thing
 benchInsert MapFunctions {new, insert} ks = do
   m <- new
-  void $ evaluate $ Foldable.foldlM (\m k -> insert k k $! m) m ks
+  m <- Foldable.foldlM (\m k -> insert k k $! m) m ks
+  pure $ Thing m
 
-benchAll :: MapFunctions k k -> VB.Vector k -> IO ()
+benchAll :: MapFunctions k k -> VB.Vector k -> IO Thing
 benchAll MapFunctions {new, insert, delete, lookup} ks = do
   m <- new
   m <- Foldable.foldlM (\m k -> insert k k $! m) m ks
   m <- Foldable.foldlM (\m k -> delete k m) m $ VB.take (VB.length ks `div` 2) ks
   VB.forM_ ks $ \k -> lookup k m
-  void $ evaluate m
+  pure $ Thing m
 
-benchLookup :: MapFunctions k k -> VB.Vector k -> VB.Vector k -> IO ()
+benchLookup :: MapFunctions k k -> VB.Vector k -> VB.Vector k -> IO Thing
 benchLookup MapFunctions {new, insert, lookup} ks ks' = do
   m <- new
   m <- Foldable.foldlM (\m k -> insert k k $! m) m ks
   VB.forM_ ks' $ \k' -> lookup k' m
-  void $ evaluate m
+  pure $ Thing m
+
+data Thing :: Type where
+  Thing :: !a -> Thing
