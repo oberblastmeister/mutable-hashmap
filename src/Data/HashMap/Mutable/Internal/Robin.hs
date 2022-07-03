@@ -66,16 +66,14 @@ insert key value HashMap {var} = do
   capacity <- Array.sizeMut (Array.liftMut keys)
   size <- Array.read refs sizeIx
   threshold <- Array.read refs thresholdIx
-  map <-
-    if size > threshold
-      then do
-        let newCapacity = Primes.getPrime $! capacity * 2
-        Array.write refs thresholdIx $! getThreshold newCapacity
-        map <- resize_ newCapacity map
-        MutVar.writeMutVar var map
-        pure map
-      else pure map
-  insert_ key value map
+  if size > threshold
+    then do
+      let newCapacity = Primes.getPrime $! capacity * 2
+      Array.write refs thresholdIx $! getThreshold newCapacity
+      map <- resize_ newCapacity map
+      insert_ key value map
+      MutVar.writeMutVar var map
+    else insert_ key value map
   Array.write refs sizeIx =<< (1 +) <$> Array.read refs sizeIx
 {-# INLINEABLE insert #-}
 
@@ -84,28 +82,28 @@ insert_ key value HashMap_ {info, keys, values} = do
   capacity <- Array.sizeMut (Array.liftMut keys)
   let !hash = Hashable.hash key
       bucketIx = hash `mod` capacity
-      go !bucketIx !dist !hash !key value = do
-        hash' <- Array.read info (bucketIx * 2)
-        dist' <- Array.read info (bucketIx * 2 + 1)
+      go !i !dist !hash !key value = do
+        hash' <- Array.read info (i * 2)
+        dist' <- Array.read info (i * 2 + 1)
         if hash' == 0
           then do
-            Array.write info (bucketIx * 2) hash
-            Array.write info (bucketIx * 2 + 1) dist
-            Array.write (Array.liftMut keys) bucketIx key
-            Array.write (Array.liftMut values) bucketIx value
+            Array.write info (i * 2) hash
+            Array.write info (i * 2 + 1) dist
+            Array.write (Array.liftMut keys) i key
+            Array.write (Array.liftMut values) i value
           else do
-            key' <- Array.read (Array.liftMut keys) bucketIx
+            key' <- Array.read (Array.liftMut keys) i
             if
-                | hash == hash' && key == key' -> Array.write (Array.liftMut values) bucketIx value
+                | hash == hash' && key == key' -> Array.write (Array.liftMut values) i value
                 -- robinhood!
                 | dist' < dist -> do
-                    value' <- Array.read (Array.liftMut values) bucketIx
-                    Array.write info (bucketIx * 2) hash
-                    Array.write info (bucketIx * 2 + 1) dist
-                    Array.write (Array.liftMut keys) bucketIx key
-                    Array.write (Array.liftMut values) bucketIx value
-                    go ((bucketIx + 1) `mod` capacity) (dist' + 1) hash' key' value'
-                | otherwise -> go ((bucketIx + 1) `mod` capacity) (dist + 1) hash' key value
+                    value' <- Array.read (Array.liftMut values) i
+                    Array.write info (i * 2) hash
+                    Array.write info (i * 2 + 1) dist
+                    Array.write (Array.liftMut keys) i key
+                    Array.write (Array.liftMut values) i value
+                    go ((i + 1) `mod` capacity) (dist' + 1) hash' key' value'
+                | otherwise -> go ((i + 1) `mod` capacity) (dist + 1) hash' key value
   go bucketIx 0 hash key value
 {-# INLINE insert_ #-}
 
@@ -113,25 +111,25 @@ add_' :: (PrimMonad m, HasArray arr k v) => Hash -> k -> v -> HashMap_ arr (Prim
 add_' hash key value HashMap_ {info, keys, values} = do
   capacity <- Array.sizeMut (Array.liftMut keys)
   let bucketIx = hash `mod` capacity
-      go !bucketIx !dist !hash !key value = do
-        hash' <- Array.read info (bucketIx * 2)
-        dist' <- Array.read info (bucketIx * 2 + 1)
+      go !i !dist !hash !key value = do
+        hash' <- Array.read info (i * 2)
+        dist' <- Array.read info (i * 2 + 1)
         if
             | hash' == 0 -> do
-                Array.write info (bucketIx * 2) hash
-                Array.write info (bucketIx * 2 + 1) dist
-                Array.write (Array.liftMut keys) bucketIx key
-                Array.write (Array.liftMut values) bucketIx value
+                Array.write info (i * 2) hash
+                Array.write info (i * 2 + 1) dist
+                Array.write (Array.liftMut keys) i key
+                Array.write (Array.liftMut values) i value
             -- robinhood!
             | dist' < dist -> do
-                value' <- Array.read (Array.liftMut values) bucketIx
-                key' <- Array.read (Array.liftMut keys) bucketIx
-                Array.write info (bucketIx * 2) hash
-                Array.write info (bucketIx * 2 + 1) dist
-                Array.write (Array.liftMut keys) bucketIx key
-                Array.write (Array.liftMut values) bucketIx value
-                go ((bucketIx + 1) `mod` capacity) (dist' + 1) hash' key' value'
-            | otherwise -> go ((bucketIx + 1) `mod` capacity) (dist + 1) hash' key value
+                value' <- Array.read (Array.liftMut values) i
+                key' <- Array.read (Array.liftMut keys) i
+                Array.write info (i * 2) hash
+                Array.write info (i * 2 + 1) dist
+                Array.write (Array.liftMut keys) i key
+                Array.write (Array.liftMut values) i value
+                go ((i + 1) `mod` capacity) (dist' + 1) hash' key' value'
+            | otherwise -> go ((i + 1) `mod` capacity) (dist + 1) hash' key value
   go bucketIx 0 hash key value
 {-# INLINE add_' #-}
 
@@ -153,3 +151,35 @@ resize_ newCapacity map@HashMap_ {info, keys, values} = do
   go 0
   pure map'
 {-# INLINE resize_ #-}
+
+lookup :: (PrimMonad m, HasArray arr k v, Hashable k) => k -> HashMap arr (PrimState m) k v -> m (Maybe v)
+lookup key HashMap {var} = do
+  map@HashMap_ {values} <- MutVar.readMutVar var
+  i <- lookupIndex_' (Hashable.hash key) key map
+  if i == -1
+    then pure Nothing
+    else do
+      value <- Array.read (Array.liftMut values) i
+      pure $ Just value
+{-# INLINEABLE lookup #-}
+
+-- returns -1 if the key could not be found
+lookupIndex_' :: (PrimMonad m, HasArray arr k v, Eq k) => Hash -> k -> HashMap_ arr (PrimState m) k v -> m Int
+lookupIndex_' !hash !key HashMap_ {info, keys} = do
+  capacity <- Array.sizeMut (Array.liftMut keys)
+  let bucketIx = hash `mod` capacity
+      go i dist = do
+        hash' <- Array.read info (i * 2)
+        dist' <- Array.read info (i * 2 + 1)
+        if hash' == 0 || dist > dist'
+          then pure -1
+          else do
+            key' <- Array.read (Array.liftMut keys) i
+            if hash == hash' && key == key'
+              then pure i
+              else go ((i + 1) `mod` capacity) (dist + 1)
+  go bucketIx 0
+{-# INLINE lookupIndex_' #-}
+
+delete_ :: (PrimMonad m, HasArray arr k v) => k -> v -> HashMap_ arr (PrimState m) k v -> m ()
+delete_ key value HashMap_ {info, keys, values} = undefined

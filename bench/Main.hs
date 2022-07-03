@@ -13,6 +13,7 @@ import Data.Foldable qualified as Foldable
 import Data.HashMap.Mutable qualified as HashMap.Mutable.Arena
 import Data.HashMap.Mutable.Internal.Robin qualified as HashMap.Mutable.Robin
 import Data.HashTable.IO qualified as HashTable
+import Data.Kind (Type)
 import Data.Primitive (Array)
 import Data.Proxy
 import Data.Vector qualified as VB
@@ -113,13 +114,20 @@ makeBenches _ n =
     []
     undefined
 
-data IsMapDict where
-  IsMapDict :: forall map. (Dict (IsMap map)) -> IsMapDict
+data IsMapDict :: Type -> Type -> Type where
+  IsMapDict :: (Dict (IsMap map, IsMap.Key map ~ k, IsMap.Value map ~ v)) -> IsMapDict k v
+
+withIsMapDict :: IsMapDict -> (forall map. IsMap map => r) -> r
+withIsMapDict con r = case con of
+  (IsMapDict (Dict :: Dict (IsMap map))) -> r @map
+
+isMapDict :: forall map. IsMap map => IsMapDict
+isMapDict = IsMapDict (Dict @(IsMap map))
 
 -- mapConstraints :: [forall map. Dict (IsMap map)]
-mapDicts :: [IsMapDict]
+-- mapDicts :: [IsMapDict]
 mapDicts =
-  [ IsMapDict (Dict @(IsMap (HashMap.Mutable.Arena.HashMap RealWorld Int Int)))
+  [ isMapDict @(HashMap.Mutable.Arena.HashMap RealWorld Int Int)
   ]
 
 getRandomVec :: (MonadRandom m, Random a) => m (VB.Vector a)
