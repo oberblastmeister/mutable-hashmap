@@ -43,6 +43,10 @@ data HashMap_ arr s k v = -- | Invariants: buckets, hashes, links, keys, and val
 
 type role HashMap_ nominal nominal nominal nominal
 
+type BothElement arr k v = (Array.Element arr k, Array.Element arr v)
+
+type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr)
+
 sizeRef, freeSizeRef, freeListRef :: Int
 sizeRef = 0
 freeSizeRef = 1
@@ -256,17 +260,13 @@ add entryIndex bucketIndex hashCode key value HashMap_ {buckets, hashes, links, 
   Array.write buckets bucketIndex entryIndex
 {-# INLINE add #-}
 
-type BothElement arr k v = (Array.Element arr k, Array.Element arr v)
-
-type HasArray arr k v = (BothElement arr k v, Array.ContiguousU arr)
-
 resize_ :: (HasArray arr k v, PrimMonad m) => Int -> HashMap_ arr (PrimState m) k v -> m (HashMap_ arr (PrimState m) k v)
-resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
-  buckets' <- Array.replicateMut newSize -1
-  hashes' <- Array.resize hashes newSize
-  links' <- Array.resize links newSize
-  keys' <- Array.new newSize
-  values' <- Array.new newSize
+resize_ newCapacity map@HashMap_ {buckets, hashes, links, keys, values} = do
+  buckets' <- Array.replicateMut newCapacity -1
+  hashes' <- Array.resize hashes newCapacity
+  links' <- Array.resize links newCapacity
+  keys' <- Array.new newCapacity
+  values' <- Array.new newCapacity
   bucketSize <- Array.sizeMut buckets
   Array.copyMut keys' 0 $ Array.sliceMut (Array.liftMut keys) 0 bucketSize
   Array.copyMut values' 0 $ Array.sliceMut (Array.liftMut values) 0 bucketSize
@@ -275,7 +275,7 @@ resize_ newSize map@HashMap_ {buckets, hashes, links, keys, values} = do
         | entryIndex < bucketsSize buckets = do
             hashCode <- Array.read hashes' entryIndex
             when (hashCode /= -1) $ do
-              let bucketIndex = hashCode `rem` newSize
+              let bucketIndex = hashCode `rem` newCapacity
               collidedEntryIndex <- Array.read buckets' bucketIndex
               Array.write links' entryIndex collidedEntryIndex
               Array.write buckets' bucketIndex entryIndex

@@ -9,6 +9,7 @@ import Criterion.Main
 import Data.Constraint (Dict (..))
 import Data.Foldable qualified as Foldable
 import Data.HashMap.Mutable.Internal.Generic qualified as HashMap.Mutable.Arena
+import Data.HashMap.Mutable.Internal.Robin qualified as HashMap.Mutable.Robin
 import Data.HashTable.IO qualified as HashTable
 import Data.Primitive (Array)
 import Data.Proxy
@@ -61,6 +62,12 @@ comparisonBenches n =
                   n
                   (HashMap.Mutable.Arena.newWithCapacity @Array)
                   HashMap.Mutable.Arena.insert,
+            bench "mutable-hashmaps robin" $
+              whnfIO $
+                insertMonotonic
+                  n
+                  (HashMap.Mutable.Robin.newWithCapacity @Array)
+                  HashMap.Mutable.Robin.insert,
             bench "vector-hashtables" $
               whnfIO $
                 insertMonotonic
