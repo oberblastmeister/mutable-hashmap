@@ -1,7 +1,5 @@
 module Main where
 
-import Control.Exception (evaluate)
-import Control.Monad (void)
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Control.Monad.Random (MonadRandom)
 import Control.Monad.Random.Strict qualified as Monad.Random
@@ -9,9 +7,7 @@ import Criterion.Main
 import Data.Foldable qualified as Foldable
 import Data.Functor ((<&>))
 import Data.HashMap.Mutable qualified as HashMap.Mutable.Arena
-import Data.HashMap.Mutable.Internal.Robin qualified as HashMap.Mutable.Robin
 import Data.Kind (Type)
-import Data.Primitive (Array)
 import Data.Vector qualified as VB
 import Data.Vector.Hashtables qualified as Vector.Hashtables
 import Data.Vector.Hashtables.Internal qualified as VH
@@ -68,13 +64,6 @@ makeBenches' n =
                 (HashMap.Mutable.Arena.newWithCapacity)
                 HashMap.Mutable.Arena.insert
                 HashMap.Mutable.Arena.lookup,
-          bench "mutable-hashmaps robin" $
-            whnfIO $
-              insertMonotonic
-                n
-                (HashMap.Mutable.Robin.newWithCapacity @Array)
-                HashMap.Mutable.Robin.insert
-                HashMap.Mutable.Robin.lookup,
           bench "vector-hashtables" $
             whnfIO $
               insertMonotonic

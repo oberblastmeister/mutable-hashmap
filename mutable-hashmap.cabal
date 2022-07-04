@@ -79,13 +79,9 @@ library
         Data.HashMap.Mutable.Internal.Utils
         Data.HashMap.Mutable.Internal.Primes
         Data.HashMap.Mutable.Internal.Basic
-        Data.HashMap.Mutable.Internal.Robin
         Data.HashMap.Mutable.Internal.Generic
-    -- generated modules
-    Data.HashMap.Mutable.Boxed
-    Data.HashMap.Mutable.Boxed.Small
-    Data.HashMap.Mutable.Prim
-    Data.HashMap.Mutable.Unlifted
+      -- generated modules
+      Data.HashMap.Mutable.Boxed
   if flag(debug)
     cpp-options: -DDEBUG
     if impl(ghc >= 9.2.2)

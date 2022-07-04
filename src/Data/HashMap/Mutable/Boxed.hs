@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
 #define MOD Boxed
-#define ARR Primitive.Array
+#define ARR1 Primitive.Array
+#define ARR2 Primitive.Array
 #include "Template.hs"
