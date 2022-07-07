@@ -208,7 +208,7 @@ delete_ key map@HashMap_ {info, keys, values} = do
               then do
                 setPrimArray info (i * 2) 2 0
                 deleteEntry (Array.liftMut keys) i
-                deleteEntry (Array.liftMut values) j
+                deleteEntry (Array.liftMut values) i
               else do
                 writeBucket map i =<< readBucket map j
                 go j ((j + 1) `mod` capacity)
